@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #ecdcc8;
+  color: #3e2917;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  /* 한 손 조작을 위한 큼직한 입체 버튼 */
+  .btn-chunky {
+    @apply relative flex min-h-[60px] w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 font-display text-lg
+      transition-transform duration-100 select-none;
+  }
+  .btn-chunky:active {
+    transform: translateY(3px);
+  }
+  .btn-orange {
+    @apply btn-chunky bg-carrot-500 text-white shadow-chunk-orange;
+  }
+  .btn-orange:active {
+    box-shadow: 0 2px 0 0 #c24e00;
+  }
+  .btn-yellow {
+    @apply btn-chunky bg-honey-500 text-bark-800 shadow-chunk-yellow;
+  }
+  .btn-yellow:active {
+    box-shadow: 0 2px 0 0 #b87e00;
+  }
+  .btn-brown {
+    @apply btn-chunky bg-bark-700 text-cream-100;
+    box-shadow: 0 5px 0 0 #2a1b0f;
+  }
+  .btn-brown:active {
+    box-shadow: 0 2px 0 0 #2a1b0f;
+  }
+  .card {
+    @apply rounded-3xl border-2 border-bark-700 bg-cream-50 p-4 shadow-chunk;
+  }
+  .field {
+    @apply w-full rounded-xl border-2 border-bark-200 bg-white px-3 py-3 text-base text-bark-800 outline-none
+      placeholder:text-bark-300 focus:border-carrot-500;
+  }
+}
+
+/* 발자국 배경 */
+.paw-bg {
+  background-color: #fff8ec;
+  background-image:
+    radial-gradient(circle at 20% 18%, rgba(194, 154, 108, 0.14) 0 14px, transparent 15px),
+    radial-gradient(circle at 80% 62%, rgba(194, 154, 108, 0.12) 0 18px, transparent 19px),
+    radial-gradient(circle at 35% 88%, rgba(194, 154, 108, 0.12) 0 12px, transparent 13px);
+}
+
+/* iOS 노치/홈 인디케이터 대응 */
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
