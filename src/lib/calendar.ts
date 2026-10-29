@@ -1,13 +1,28 @@
 import { addDays, diffDays, fromISO, nextBillingDate, startOfToday } from "./dates";
 import { discountStoreUrl } from "./services";
-import type { SubView } from "./subscriptions";
+import type { SubKind, SubView } from "./subscriptions";
 
-/** 100% 클라이언트 사이드: 서버/외부 API 없이 .ics 파일과 구글 캘린더 URL을 만든다. */
+/**
+ * .ics / 구글 캘린더 알람 생성.
+ * 아이폰(사파리·인앱)은 blob:/data: URL 과 window.open 을 차단하므로,
+ * 실제 파일은 /api/ics 가 text/calendar + Content-Disposition: inline 으로 스트리밍한다.
+ */
 
 export const ALERT_DAYS_BEFORE = 3;
 export const ALERT_HOUR = 9; // 오전 9시
 const EVENT_MINUTES = 30;
 const EXPLICIT_MONTHS = 12;
+
+/** API 쿼리스트링으로 주고받는 최소 구독 데이터 (Date 직렬화 불필요) */
+export interface IcsItem {
+  id: string;
+  serviceId: string;
+  name: string;
+  emoji: string;
+  kind: SubKind;
+  date: string; // YYYY-MM-DD
+  price?: number;
+}
 
 export interface AlarmEvent {
   uid: string;
@@ -48,7 +63,61 @@ function resolveStart(due: Date, now: Date): Date {
     if (day > due) break;
     if (at9(day) > now) return at9(day);
   }
-  return nominal; // 이미 결제일까지 지난 경우
+  return nominal;
+}
+
+function itemToView(s: IcsItem): SubView {
+  const today = startOfToday();
+  const due = s.kind === "billing" ? nextBillingDate(s.date, today) : fromISO(s.date);
+  return {
+    ...s,
+    cancelUrl: "",
+    createdAt: 0,
+    due,
+    daysLeft: diffDays(due, today),
+    alertDate: addDays(due, -ALERT_DAYS_BEFORE),
+  };
+}
+
+export function toIcsPayload(views: SubView[]): IcsItem[] {
+  return views.map(({ id, serviceId, name, emoji, kind, date, price }) => ({
+    id,
+    serviceId,
+    name,
+    emoji,
+    kind,
+    date,
+    price,
+  }));
+}
+
+export function parseIcsPayload(raw: string): IcsItem[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > 50) {
+    throw new Error("invalid payload");
+  }
+  return parsed.map((row) => {
+    if (!row || typeof row !== "object") throw new Error("invalid item");
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== "string" || typeof r.serviceId !== "string" || typeof r.name !== "string") {
+      throw new Error("invalid item");
+    }
+    if (typeof r.emoji !== "string" || typeof r.date !== "string") throw new Error("invalid item");
+    if (r.kind !== "trial" && r.kind !== "billing") throw new Error("invalid kind");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date)) throw new Error("invalid date");
+    const item: IcsItem = {
+      id: r.id.slice(0, 64),
+      serviceId: r.serviceId.slice(0, 64),
+      name: r.name.slice(0, 40),
+      emoji: r.emoji.slice(0, 8),
+      kind: r.kind,
+      date: r.date,
+    };
+    if (typeof r.price === "number" && Number.isFinite(r.price) && r.price >= 0) {
+      item.price = Math.min(Math.round(r.price), 10_000_000);
+    }
+    return item;
+  });
 }
 
 /* ───────────── 이벤트 생성 ───────────── */
@@ -76,15 +145,12 @@ export function buildEvents(v: SubView, siteUrl: string, now = new Date()): Alar
     return [make("0", v.due, resolveStart(v.due, now))];
   }
 
-  // 매월 결제일
   const billingDay = fromISO(v.date).getDate();
-  // 결제일이 4~28일이면 알림일(1~25일)이 모든 달에 존재 -> RRULE 로 정확히 반복 가능
   const cleanMonthly = billingDay >= ALERT_DAYS_BEFORE + 1 && billingDay <= 28;
 
   if (cleanMonthly) {
     const nominal = at9(addDays(v.due, -ALERT_DAYS_BEFORE));
     if (nominal > now) return [make("series", v.due, nominal, "FREQ=MONTHLY")];
-    // 이번 달 알림 시각은 이미 지남: 이번 회차 1회 알람 + 다음 회차부터 매월 반복
     const nextDue = nextBillingDate(v.date, addDays(v.due, 1));
     return [
       make("once", v.due, resolveStart(v.due, now)),
@@ -92,7 +158,6 @@ export function buildEvents(v: SubView, siteUrl: string, now = new Date()): Alar
     ];
   }
 
-  // 1~3일 / 29~31일 결제: 달마다 '3일 전' 날짜가 달라지므로 앞으로 12회차를 개별 일정으로 생성
   const events: AlarmEvent[] = [];
   let due = v.due;
   for (let i = 0; i < EXPLICIT_MONTHS; i++) {
@@ -109,7 +174,7 @@ function escapeText(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
 
-/** RFC 5545: 한 줄은 75옥텟 이하, 넘으면 CRLF + 공백으로 접는다 (UTF-8 바이트 기준, 문자 단위로 자름) */
+/** RFC 5545: 한 줄은 75옥텟 이하, 넘으면 CRLF + 공백으로 접는다 */
 function fold(line: string): string {
   const enc = new TextEncoder();
   if (enc.encode(line).length <= 75) return line;
@@ -154,7 +219,6 @@ export function buildIcs(views: SubView[], siteUrl: string, now = new Date()): s
         `SUMMARY:${escapeText(ev.title)}`,
         `DESCRIPTION:${escapeText(ev.description)}`,
         "TRANSP:TRANSPARENT",
-        // 일정 시작 시각(= 결제 3일 전 오전 9시)에 잠금화면 알림
         "BEGIN:VALARM",
         "TRIGGER:-PT0M",
         "ACTION:DISPLAY",
@@ -169,37 +233,24 @@ export function buildIcs(views: SubView[], siteUrl: string, now = new Date()): s
   return lines.map(fold).join("\r\n") + "\r\n";
 }
 
-function isIOS(): boolean {
-  const ua = navigator.userAgent;
-  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+export function buildIcsFromItems(items: IcsItem[], siteUrl: string, now = new Date()): string {
+  return buildIcs(items.map(itemToView), siteUrl, now);
 }
 
-/** .ics 를 브라우저에서 즉시 실행/다운로드. iOS 는 열면 '캘린더에 추가' 시트가 뜬다. */
-export function downloadIcs(ics: string, filename: string): void {
-  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-
-  if (isIOS()) {
-    if (!window.open(url, "_blank")) window.location.assign(url);
-  } else {
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+/** 아이폰·갤럭시 공통: 현재 창에서 /api/ics 로 이동 → 서버가 text/calendar 스트리밍 → 네이티브 캘린더 시트 */
+export function icsApiUrl(views: SubView[]): string {
+  const data = encodeURIComponent(JSON.stringify(toIcsPayload(views)));
+  return `/api/ics?data=${data}`;
 }
 
-/** 구독 목록 -> .ics 생성 + 즉시 실행 (서버 호출 없음) */
-export function addToPhoneCalendar(views: SubView[], filename = "subscription-dog-alarm.ics"): void {
-  downloadIcs(buildIcs(views, window.location.origin), filename);
+export function addToPhoneCalendar(views: SubView[]): void {
+  if (views.length === 0) return;
+  // blob: / window: / window.open 금지 — iOS 가 캘린더 핸들러로 넘기지 않음
+  window.location.href = icsApiUrl(views);
 }
 
 /* ───────────── Google Calendar ───────────── */
 
-/** 구독 1건을 구글 캘린더 '일정 만들기' URL 로 변환 (월 반복이면 RRULE 포함) */
 export function buildGoogleCalendarUrl(v: SubView, siteUrl: string, now = new Date()): string {
   const events = buildEvents(v, siteUrl, now);
   const ev = events.find((e) => e.rrule) ?? events[0];

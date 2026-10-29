@@ -6,8 +6,9 @@ import { addToPhoneCalendar, buildGoogleCalendarUrl } from "../lib/calendar";
 import type { SubView } from "../lib/subscriptions";
 
 /**
- * [알림받기] - 전화번호/서버 없이, 사용자 폰의 기본 달력에 '결제 3일 전 오전 9시' 알람을 등록한다.
- * 전부 브라우저에서 처리: .ics 파일 실행 또는 구글 캘린더 URL 새 창.
+ * [알림받기] - 폰 기본 달력에 '결제 3일 전 오전 9시' 알람 등록.
+ * .ics 는 /api/ics 가 text/calendar 로 스트리밍 (iOS 네이티브 시트 트리거).
+ * 구글 캘린더는 일정 만들기 URL 새 창.
  */
 export default function AlarmSection({ views }: { views: SubView[] }) {
   const [done, setDone] = useState(false);
@@ -15,8 +16,9 @@ export default function AlarmSection({ views }: { views: SubView[] }) {
   const empty = views.length === 0;
 
   function handleIcs() {
-    addToPhoneCalendar(views);
     setDone(true);
+    // 현재 창 네비게이션 → Content-Type: text/calendar 응답 → iOS/Android 캘린더 시트
+    addToPhoneCalendar(views);
   }
 
   function handleGoogle() {
@@ -82,9 +84,9 @@ export default function AlarmSection({ views }: { views: SubView[] }) {
           className="mt-3 break-keep rounded-xl bg-white p-3 text-sm leading-snug text-bark-700"
           role="status"
         >
-          ✅ 알람 파일을 만들었어요!
+          ✅ 캘린더 추가 화면을 열었어요!
           <br />
-          아이폰은 열리는 화면에서 <b>모두 추가</b>, 갤럭시는 다운로드된 파일을 눌러 <b>캘린더</b>로 추가해 주세요.
+          아이폰은 <b>모두 추가</b>, 갤럭시는 열린 파일을 <b>캘린더</b>로 추가해 주세요.
         </motion.p>
       )}
     </section>

@@ -288,7 +288,7 @@ function SubCard({ v, onRemove }: { v: SubView; onRemove: () => void }) {
   const [alarmed, setAlarmed] = useState(false);
 
   function addAlarm() {
-    addToPhoneCalendar([v], `${v.serviceId}-alarm.ics`);
+    addToPhoneCalendar([v]);
     setAlarmed(true);
     setTimeout(() => setAlarmed(false), 3000);
   }
