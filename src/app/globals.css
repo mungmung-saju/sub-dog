@@ -41,6 +41,13 @@ body {
   .btn-brown:active {
     box-shadow: 0 2px 0 0 #2a1b0f;
   }
+  .btn-white {
+    @apply btn-chunky border-2 border-bark-700 bg-white text-bark-700;
+    box-shadow: 0 5px 0 0 #563820;
+  }
+  .btn-white:active {
+    box-shadow: 0 2px 0 0 #563820;
+  }
   .card {
     @apply rounded-3xl border-2 border-bark-700 bg-cream-50 p-4 shadow-chunk;
   }

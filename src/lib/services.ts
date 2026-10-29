@@ -33,12 +33,12 @@ export const SUBSCRIPTION_LINKS: Record<Platform, string> = {
 };
 
 /** [싸게 연장하기] → 내가 운영하는 할인 구독 스토어. 서비스/출처 추적용 UTM 포함 */
-export function discountStoreUrl(serviceId: string): string {
+export function discountStoreUrl(serviceId: string, medium = "renew-button"): string {
   const base = process.env.NEXT_PUBLIC_DISCOUNT_STORE_URL || "https://example.com/store";
   try {
     const url = new URL(base);
     url.searchParams.set("utm_source", "subscription-dog");
-    url.searchParams.set("utm_medium", "renew-button");
+    url.searchParams.set("utm_medium", medium);
     url.searchParams.set("service", serviceId);
     return url.toString();
   } catch {

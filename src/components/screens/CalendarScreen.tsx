@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Dog from "../Dog";
 import AdSlot from "../AdSlot";
+import AlarmSection from "../AlarmSection";
+import { addToPhoneCalendar } from "../../lib/calendar";
 import { CUSTOM_SERVICE_ID, SERVICES, discountStoreUrl } from "../../lib/services";
 import {
   addDays,
@@ -68,7 +70,7 @@ export default function CalendarScreen({ views, onAdd, onRemove, onBack, prefill
         )}
       </section>
 
-      <NotifyForm views={views} />
+      <AlarmSection views={views} />
 
       <AdSlot format="banner" className="mt-8" />
     </div>
@@ -283,6 +285,13 @@ function MonthView({ views }: { views: SubView[] }) {
 
 function SubCard({ v, onRemove }: { v: SubView; onRemove: () => void }) {
   const urgent = v.daysLeft <= 3;
+  const [alarmed, setAlarmed] = useState(false);
+
+  function addAlarm() {
+    addToPhoneCalendar([v], `${v.serviceId}-alarm.ics`);
+    setAlarmed(true);
+    setTimeout(() => setAlarmed(false), 3000);
+  }
   return (
     <motion.li
       layout
@@ -299,7 +308,7 @@ function SubCard({ v, onRemove }: { v: SubView; onRemove: () => void }) {
             {v.kind === "trial" ? "🎁 무료체험 종료" : "💳 다음 결제"} · {formatKoreanDate(v.due)}
           </p>
           <p className="text-xs text-bark-400">
-            🔔 알림 {formatKoreanDate(v.alertDate)}
+            🔔 알림 {formatKoreanDate(v.alertDate)} 오전 9시
             {v.price ? ` · ${v.price.toLocaleString("ko-KR")}원` : ""}
           </p>
         </div>
@@ -311,6 +320,14 @@ function SubCard({ v, onRemove }: { v: SubView; onRemove: () => void }) {
           >
             {dDayLabel(v.daysLeft)}
           </span>
+          <button
+            type="button"
+            onClick={addAlarm}
+            aria-label={`${v.name} 폰 알람 켜기`}
+            className="min-h-[36px] whitespace-nowrap rounded-full border-2 border-bark-700 bg-white px-2.5 text-xs font-bold text-bark-700 active:scale-95"
+          >
+            {alarmed ? "✅ 완료!" : "🔔 폰 알람 켜기"}
+          </button>
           <button onClick={onRemove} aria-label={`${v.name} 삭제`} className="h-8 px-1 text-xs text-bark-400 underline">
             삭제
           </button>
@@ -342,115 +359,5 @@ function SubCard({ v, onRemove }: { v: SubView; onRemove: () => void }) {
         </a>
       </div>
     </motion.li>
-  );
-}
-
-/* ───────────── 알림 신청 ───────────── */
-
-type Channel = "kakao" | "email" | "sms";
-const CHANNELS: { id: Channel; name: string; label: string; placeholder: string; type: string; mode: "tel" | "email" }[] = [
-  { id: "kakao", name: "카카오톡", label: "💬 카카오톡", placeholder: "휴대폰 번호 (010-0000-0000)", type: "tel", mode: "tel" },
-  { id: "email", name: "이메일", label: "✉️ 이메일", placeholder: "이메일 주소", type: "email", mode: "email" },
-  { id: "sms", name: "문자", label: "📱 문자", placeholder: "휴대폰 번호 (010-0000-0000)", type: "tel", mode: "tel" },
-];
-
-function NotifyForm({ views }: { views: SubView[] }) {
-  const [channel, setChannel] = useState<Channel>("kakao");
-  const [contact, setContact] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [message, setMessage] = useState("");
-  const ch = CHANNELS.find((c) => c.id === channel)!;
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setStatus("loading");
-    try {
-      const res = await fetch("/api/reminders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          channel,
-          contact,
-          consent,
-          subscriptions: views.map((v) => ({
-            serviceId: v.serviceId,
-            name: v.name,
-            kind: v.kind,
-            dueDate: toISO(v.due),
-            alertDate: toISO(v.alertDate),
-            price: v.price,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "신청에 실패했어요.");
-      setStatus("done");
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "신청에 실패했어요.");
-      setStatus("error");
-    }
-  }
-
-  return (
-    <section className="card mt-6 !bg-honey-300/40">
-      <h3 className="font-display text-lg text-bark-800">🔔 알림받기</h3>
-      <p className="text-sm text-bark-600">결제 3일 전에 해지하라고 구독이가 짖어줄게!</p>
-
-      {status === "done" ? (
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-3 rounded-2xl bg-white p-4 text-center">
-          <Dog size={90} mood="happy" className="mx-auto" />
-          <p className="font-display text-lg text-bark-800">알림 신청 완료! 멍멍 🐶</p>
-          <p className="mt-1 text-sm text-bark-500">결제 3일 전에 {ch.name}(으)로 알려드릴게요.</p>
-          <button onClick={() => setStatus("idle")} className="mt-2 text-xs text-bark-400 underline">
-            다시 신청하기
-          </button>
-        </motion.div>
-      ) : (
-        <form onSubmit={submit} className="mt-3 space-y-3">
-          <div className="grid grid-cols-3 gap-1.5 rounded-2xl bg-white/70 p-1">
-            {CHANNELS.map((c) => (
-              <button
-                type="button"
-                key={c.id}
-                onClick={() => setChannel(c.id)}
-                aria-pressed={channel === c.id}
-                className={`min-h-[44px] rounded-xl text-[13px] ${
-                  channel === c.id ? "bg-carrot-500 font-bold text-white" : "text-bark-600"
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-          <input
-            className="field"
-            type={ch.type}
-            inputMode={ch.mode}
-            placeholder={ch.placeholder}
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
-            required
-            autoComplete={ch.mode === "email" ? "email" : "tel"}
-          />
-          <label className="flex items-start gap-2 text-xs text-bark-600">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="mt-0.5 h-5 w-5 accent-carrot-500"
-            />
-            <span>
-              (필수) 해지 알림 발송을 위한 연락처·구독 일정 수집 및 이용에 동의합니다. 알림 발송 후 파기해요.
-            </span>
-          </label>
-          {views.length === 0 && <p className="text-xs text-carrot-600">먼저 위에서 구독을 1개 이상 등록해 주세요.</p>}
-          {status === "error" && <p className="text-sm text-red-600">{message}</p>}
-          <button type="submit" disabled={!consent || !contact || views.length === 0 || status === "loading"} className="btn-yellow disabled:opacity-40">
-            {status === "loading" ? "신청 중..." : "🔔 알림 신청하기"}
-          </button>
-        </form>
-      )}
-    </section>
   );
 }
