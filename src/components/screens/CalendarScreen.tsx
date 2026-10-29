@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Dog from "../Dog";
 import AdSlot from "../AdSlot";
@@ -46,9 +46,7 @@ export default function CalendarScreen({ views, onAdd, onRemove, onBack, prefill
         </div>
       </header>
 
-      <RegisterForm onAdd={onAdd} prefill={prefill} />
-
-      <MonthView views={views} />
+      <RegisterForm onAdd={onAdd} prefill={prefill} views={views} />
 
       <section className="mt-6">
         <h3 className="mb-2 font-display text-lg text-bark-800">
@@ -80,7 +78,7 @@ export default function CalendarScreen({ views, onAdd, onRemove, onBack, prefill
 
 /* ───────────── 등록 폼 ───────────── */
 
-function RegisterForm({ onAdd, prefill }: Pick<Props, "onAdd" | "prefill">) {
+function RegisterForm({ onAdd, prefill, views }: Pick<Props, "onAdd" | "prefill" | "views">) {
   const [serviceId, setServiceId] = useState(prefill?.serviceId ?? SERVICES[0].id);
   const [customName, setCustomName] = useState("");
   const [kind, setKind] = useState<SubKind>("trial");
@@ -186,6 +184,8 @@ function RegisterForm({ onAdd, prefill }: Pick<Props, "onAdd" | "prefill">) {
         />
       </div>
 
+      <MonthView views={views} selectedDate={date} onSelectDate={setDate} />
+
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <button type="submit" className="btn-orange">
@@ -195,11 +195,32 @@ function RegisterForm({ onAdd, prefill }: Pick<Props, "onAdd" | "prefill">) {
   );
 }
 
-/* ───────────── 월간 캘린더 ───────────── */
+/* ───────────── 월간 캘린더 (날짜 입력과 양방향 연동) ───────────── */
 
-function MonthView({ views }: { views: SubView[] }) {
+function MonthView({
+  views,
+  selectedDate,
+  onSelectDate,
+}: {
+  views: SubView[];
+  selectedDate: string;
+  onSelectDate: (iso: string) => void;
+}) {
   const today = startOfToday();
-  const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const initial = selectedDate ? fromISO(selectedDate) : today;
+  const [cursor, setCursor] = useState({ y: initial.getFullYear(), m: initial.getMonth() });
+
+  // 입력칸에서 날짜를 바꾸면 해당 연·월로 달력 이동
+  useEffect(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) return;
+    const d = fromISO(selectedDate);
+    setCursor((c) => (c.y === d.getFullYear() && c.m === d.getMonth() ? c : { y: d.getFullYear(), m: d.getMonth() }));
+  }, [selectedDate]);
+
+  const draftAlertIso = useMemo(() => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) return "";
+    return toISO(addDays(fromISO(selectedDate), -3));
+  }, [selectedDate]);
 
   const marks = useMemo(() => {
     const map = new Map<string, { due: string[]; alert: string[] }>();
@@ -212,6 +233,8 @@ function MonthView({ views }: { views: SubView[] }) {
     for (const v of views) {
       const due = v.kind === "billing" ? billingDateInMonth(v.date, cursor.y, cursor.m) : fromISO(v.date);
       if (!due) continue;
+      // 무료체험 종료일은 해당 월에만 표시
+      if (v.kind === "trial" && (due.getFullYear() !== cursor.y || due.getMonth() !== cursor.m)) continue;
       put(due, "due", v.name);
       put(addDays(due, -3), "alert", v.name);
     }
@@ -229,15 +252,18 @@ function MonthView({ views }: { views: SubView[] }) {
   };
 
   return (
-    <section className="card mt-5">
+    <section className="rounded-2xl border-2 border-bark-100 bg-cream-50/80 p-3">
+      <p className="mb-2 text-center text-[12px] font-semibold text-bark-500">
+        💡 달력에서 날짜를 직접 터치해서 골라도 돼요!
+      </p>
       <div className="mb-2 flex items-center justify-between">
-        <button onClick={() => shift(-1)} aria-label="이전 달" className="h-11 w-11 rounded-full text-xl active:bg-bark-100">
+        <button type="button" onClick={() => shift(-1)} aria-label="이전 달" className="h-11 w-11 rounded-full text-xl active:bg-bark-100">
           ‹
         </button>
         <h3 className="font-display text-lg">
           {cursor.y}년 {cursor.m + 1}월
         </h3>
-        <button onClick={() => shift(1)} aria-label="다음 달" className="h-11 w-11 rounded-full text-xl active:bg-bark-100">
+        <button type="button" onClick={() => shift(1)} aria-label="다음 달" className="h-11 w-11 rounded-full text-xl active:bg-bark-100">
           ›
         </button>
       </div>
@@ -254,17 +280,39 @@ function MonthView({ views }: { views: SubView[] }) {
           const iso = toISO(new Date(cursor.y, cursor.m, d));
           const mark = marks.get(iso);
           const isToday = iso === toISO(today);
+          const isDraftDue = iso === selectedDate;
+          const isDraftAlert = iso === draftAlertIso && !isDraftDue;
+          const isSavedDue = !!mark?.due.length;
+          const isSavedAlert = !!mark?.alert.length && !isSavedDue;
+
+          const titleParts = [
+            isDraftDue ? "선택한 결제·체험 종료일" : "",
+            isDraftAlert ? "3일 전 알림(미리보기)" : "",
+            ...(mark?.due.map((n) => `${n} 결제/종료`) ?? []),
+            ...(mark?.alert.map((n) => `${n} 알림`) ?? []),
+          ].filter(Boolean);
+
           return (
-            <div
+            <button
+              type="button"
               key={iso}
-              title={mark ? [...mark.due.map((n) => `${n} 결제/종료`), ...mark.alert.map((n) => `${n} 알림`)].join(", ") : undefined}
-              className={`mx-auto flex h-10 w-10 flex-col items-center justify-center rounded-full text-sm ${
-                isToday ? "border-2 border-bark-700 font-bold" : ""
-              } ${mark?.due.length ? "bg-carrot-500 font-bold text-white" : mark?.alert.length ? "bg-honey-400/70" : ""}`}
+              onClick={() => onSelectDate(iso)}
+              title={titleParts.join(", ") || undefined}
+              aria-label={`${cursor.m + 1}월 ${d}일 선택`}
+              aria-pressed={isDraftDue}
+              className={`mx-auto flex h-10 w-10 cursor-pointer flex-col items-center justify-center rounded-full text-sm transition
+                hover:bg-orange-100 active:scale-95
+                ${isToday && !isDraftDue && !isDraftAlert ? "border-2 border-bark-700 font-bold" : ""}
+                ${isDraftDue || isSavedDue ? "bg-carrot-500 font-bold text-white hover:bg-carrot-600" : ""}
+                ${isDraftAlert || (!isDraftDue && !isSavedDue && isSavedAlert) ? "bg-honey-400/80 font-semibold text-bark-800 hover:bg-honey-400" : ""}
+                ${isDraftAlert && !isSavedDue ? "ring-2 ring-honey-500 ring-offset-1" : ""}
+              `}
             >
               {d}
-              {mark?.alert.length && !mark.due.length ? <span className="-mt-0.5 text-[8px] leading-none">🔔</span> : null}
-            </div>
+              {(isDraftAlert || (isSavedAlert && !isDraftDue)) && !isDraftDue && !isSavedDue ? (
+                <span className="-mt-0.5 text-[8px] leading-none">🔔</span>
+              ) : null}
+            </button>
           );
         })}
       </div>
