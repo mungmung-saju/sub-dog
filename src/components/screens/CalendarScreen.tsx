@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Dog from "../Dog";
 import AdSlot from "../AdSlot";
 import AlarmSection from "../AlarmSection";
+import ServiceLogo from "../ServiceLogo";
 import { addToPhoneCalendar } from "../../lib/calendar";
 import { CUSTOM_SERVICE_ID, SERVICES, discountStoreUrl } from "../../lib/services";
 import {
@@ -122,13 +123,13 @@ function RegisterForm({ onAdd, prefill }: Pick<Props, "onAdd" | "prefill">) {
                 key={s.id}
                 onClick={() => setServiceId(s.id)}
                 aria-pressed={on}
-                className={`flex min-h-[64px] flex-col items-center justify-center rounded-2xl border-2 px-1 py-2 text-[13px] leading-tight transition ${
+                className={`flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-1 py-2 text-[13px] leading-tight transition ${
                   on
                     ? "border-carrot-500 bg-honey-300/60 font-bold text-bark-900"
                     : "border-bark-100 bg-white text-bark-600"
                 }`}
               >
-                <span className="text-xl">{s.emoji}</span>
+                <ServiceLogo id={s.id} size={36} />
                 <span className="mt-0.5">{s.name}</span>
               </button>
             );
@@ -301,7 +302,7 @@ function SubCard({ v, onRemove }: { v: SubView; onRemove: () => void }) {
       className={`card ${urgent ? "!border-carrot-500 !bg-honey-300/30" : ""}`}
     >
       <div className="flex items-start gap-3">
-        <span className="text-3xl">{v.emoji}</span>
+        <ServiceLogo id={v.serviceId} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-lg text-bark-800">{v.name}</p>
           <p className="text-sm text-bark-600">

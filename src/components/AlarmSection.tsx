@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { addToPhoneCalendar, buildGoogleCalendarUrl } from "../lib/calendar";
 import type { SubView } from "../lib/subscriptions";
+import ServiceLogo from "./ServiceLogo";
 
 /**
  * [알림받기] - 폰 기본 달력에 '결제 3일 전 오전 9시' 알람 등록.
@@ -61,7 +62,7 @@ export default function AlarmSection({ views }: { views: SubView[] }) {
             <li className="text-xs text-bark-500">구글 캘린더는 한 번에 일정 1개씩 등록돼요. 구독별로 눌러 주세요 👇</li>
             {views.map((v) => (
               <li key={v.id} className="flex items-center gap-2 rounded-xl bg-white p-2">
-                <span className="text-xl">{v.emoji}</span>
+                <ServiceLogo id={v.serviceId} size={28} />
                 <span className="min-w-0 flex-1 truncate text-sm text-bark-800">{v.name}</span>
                 <a
                   href={buildGoogleCalendarUrl(v, typeof window === "undefined" ? "" : window.location.origin)}

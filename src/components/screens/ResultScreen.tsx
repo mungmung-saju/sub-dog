@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import Dog from "../Dog";
 import AdSlot from "../AdSlot";
+import ServiceLogo from "../ServiceLogo";
 import { SUBSCRIPTION_LINKS, findServicesInText, type Platform } from "../../lib/services";
 
 interface Props {
@@ -99,7 +100,7 @@ export default function ResultScreen({ platform, onSwitchPlatform, onAddFromPast
             ) : (
               result.map(({ service, amount }) => (
                 <div key={service.id} className="flex items-center gap-2 rounded-xl bg-cream-200 p-2.5">
-                  <span className="text-2xl">{service.emoji}</span>
+                  <ServiceLogo id={service.id} size={36} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-display text-base text-bark-800">{service.name}</p>
                     <p className="text-xs text-bark-500">{amount ? `${amount.toLocaleString("ko-KR")}원 결제 감지` : "결제 흔적 발견"}</p>
